@@ -1,6 +1,7 @@
 const { Client, Collection, Events, GatewayIntentBits, MessageFlags } = require('discord.js');
 const fs = require('node:fs');
 const path = require('node:path');
+const db = require("./db.js");
 require('dotenv').config({ path: path.resolve(__dirname, './.env') });
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
@@ -35,5 +36,13 @@ for(const file of eventFiles) {
         client.on(event.name, (...args) => event.execute(...args));
     }
 }
+client.once("clientReady", async () => {
+    await setUp();
+    console.log("Setup complete");
+});
 
 client.login(process.env.TOKEN);
+
+async function setUp() {
+    await db.execute("CREATE TABLE IF NOT EXISTS target_list (id INTEGER UNIQUE, name VARCHAR(255))");
+}
