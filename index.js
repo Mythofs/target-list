@@ -2,7 +2,7 @@ const { Client, Collection, Events, GatewayIntentBits, MessageFlags } = require(
 const fs = require('node:fs');
 const path = require('node:path');
 const db = require("./db.js");
-require('dotenv').config({ path: path.resolve(__dirname, '../private/.env') });
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
@@ -44,5 +44,5 @@ client.once("clientReady", async () => {
 client.login(process.env.TOKEN);
 
 async function setUp() {
-    await db.execute("CREATE TABLE IF NOT EXISTS target_list (id INTEGER UNIQUE, name VARCHAR(255), desc VARCHART(255))");
+    db.exec("CREATE TABLE IF NOT EXISTS target_list (id INTEGER UNIQUE, name VARCHAR(255))");
 }

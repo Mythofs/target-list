@@ -4,16 +4,15 @@ const db = require("../../db.js");
 
 module.exports = { 
     data: new SlashCommandBuilder().setName("target").setDescription("Adds/removes player to target list")
-        .addIntegerOption((option) => option.setName("playerid").setDescription("The player to add or remove").setRequired(false))
-        .addStringOption((option) => option.setName("desc").setDescription("Description").setRequired(false)),
+        .addIntegerOption((option) => option.setName("playerid").setDescription("The player to add or remove").setRequired(false)),
     async execute(interaction) {
         await interaction.deferReply();
         try {
             const playerId = interaction.options.getInteger("playerid");
             const channel = interaction.client.channels.cache.get(process.env.CHANNEL_ID);
             if(playerId === null) {
-                const [targets] = await db.execute("SELECT * FROM target_list");
-                if(targets.length === 0)
+                const targets = db.prepare("SELECT * FROM target_list").all();
+                if(!targets)
                     return await interaction.editReply("No targets set");
                 const ids = targets.map(target => target.id);
                 const ffsStats = await safeFetch(`https://ffscouter.com/api/v1/get-stats?key=${process.env.FFSCOUTER_KEY}&targets=${ids.join()}`);
@@ -23,9 +22,8 @@ module.exports = {
                 let index = 0;
                 for(const target of targets) {
                     const stats = ffsMap.get(target.id);
-                    const s = `\n${stats.bs_estimate_human} (${getTime(stats.last_updated * 1000)}) | [${target.name} (${target.id})](https://www.torn.com/profiles.php?XID=${target.id}) | [Attack](https://www.torn.com/page.php?sid=attack&user2ID=${target.id})`;
-                    if(target.desc !== undefined)
-                        s += ` | ${target.desc}`;
+                    const userInfo = await safeFetch(`https://api.torn.com/user/:${target.id}?selections=profile&key=${process.env.API_KEY}`);
+                    const s = `\n[${target.name} (${target.id})](https://www.torn.com/profiles.php?XID=${target.id})\t${stats.bs_estimate_human} (${getTime(stats.last_updated * 1000)})\t${userInfo.status.description}\t${userInfo.last_action.status} (${userInfo.last_action.relative})\t[Attack](https://www.torn.com/page.php?sid=attack&user2ID=${target.id})`;
                     if(replies[index].length + s.length > 2000) {
                         index++;
                         replies[index] = "";
@@ -38,18 +36,14 @@ module.exports = {
                     return;
                 }
             }
-            const [targets] = await db.execute("SELECT * FROM target_list WHERE id = ?", [playerId]);
-            if(targets.length > 0) {
-                await db.execute("DELETE FROM target_list WHERE id = ?", [playerId]);
-                return await interaction.editReply(`Deleted ${targets[0].name} (${playerId})`);
+            const targets = db.prepare("SELECT * FROM target_list WHERE id = ?").get(playerId);
+            if(targets) {
+                db.prepare("DELETE FROM target_list WHERE id = ?").run(playerId);
+                return await interaction.editReply(`Deleted ${targets.name} (${playerId})`);
             }
-            const desc = interaction.options.getString("desc");
-            const info = await safeFetch(`https://api.torn.com/user/${playerId}?selections=profile&key=${process.env.API_KEY}`);
-            if(desc === null)
-                await db.execute("INSERT INTO target_list (id, name) VALUES (?, ?)", [playerId, info.name]);
-            else
-                await db.execute("INSERT INTO target_list (id, name, desc) VALUES (?, ?, ?)", [playerId, info.name, desc]);
-            return await interaction.editReply(`Added ${info.name} (${playerId})`);
+            const userInfo = await safeFetch(`https://api.torn.com/user/${playerId}?selections=profile&key=${process.env.API_KEY}`);
+            db.prepare("INSERT INTO target_list (id, name) VALUES (?, ?)").run(playerId, userInfo.name);
+            return await interaction.editReply(`Added ${userInfo.name} (${playerId})`);
         }
         catch(e) {
             console.log(e);
